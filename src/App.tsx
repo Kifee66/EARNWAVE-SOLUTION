@@ -2,47 +2,21 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
   BadgeCheck,
-  BarChart3,
-  Bell,
-  BriefcaseBusiness,
-  Building2,
   CheckCircle2,
   ChevronRight,
-  CircleDollarSign,
-  CreditCard,
-  Download,
-  Eye,
-  FileText,
-  Gauge,
+  ImagePlus,
   LockKeyhole,
   LogIn,
-  Mail,
   Menu,
-  Search,
   ShieldCheck,
-  Smartphone,
-  TrendingUp,
-  UploadCloud,
   UserPlus,
-  WalletCards,
 } from 'lucide-react'
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import {
-  activityFeed,
-  adminSummary,
-  campaignQueue,
-  packageOptions,
   platformSteps,
-  publicStats,
-  publisherOverview,
-  publisherTable,
-  recentSubmissions,
-  reviewQueue,
-  withdrawalHistory,
-  withdrawalRequests,
   values,
   type PackageOption,
-} from './data/mock-data'
+} from './data/content'
 import { cn } from './lib/utils'
 import { supabase } from './lib/supabase'
 
@@ -58,6 +32,7 @@ type PackageRecord = {
   featured: boolean
   reward_per_100_views: number | string
   perks: string[] | null
+  image_path: string | null
   is_active: boolean
 }
 
@@ -72,6 +47,7 @@ function mapPackageRecord(item: PackageRecord): PackageOption {
     badge: item.badge ?? '',
     featured: item.featured,
     rewardPer100Views: Number(item.reward_per_100_views),
+    imagePath: item.image_path,
     isActive: item.is_active,
   }
 }
@@ -86,10 +62,11 @@ type Props = {
 function App() {
   const [role, setRole] = useState<UserRole | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
-  const [packageList, setPackageList] = useState<PackageOption[]>(packageOptions)
+  const [packageList, setPackageList] = useState<PackageOption[]>([])
   const [authLoading, setAuthLoading] = useState(Boolean(supabase))
+  const [packageLoading, setPackageLoading] = useState(Boolean(supabase))
   const [authError, setAuthError] = useState('')
-  const [packageError, setPackageError] = useState('')
+  const [packageError, setPackageError] = useState(supabase ? '' : 'Connect Supabase to load live packages and manage product images.')
 
   useEffect(() => {
     const client = supabase
@@ -146,10 +123,11 @@ function App() {
     const loadPackages = async () => {
       const { data, error } = await client
         .from('packages')
-        .select('id, name, price, description, campaigns_count, badge, featured, reward_per_100_views, perks, is_active')
+        .select('id, name, price, description, campaigns_count, badge, featured, reward_per_100_views, perks, image_path, is_active')
         .order('created_at', { ascending: true })
 
       if (!active) return
+      setPackageLoading(false)
       if (error) {
         setPackageError(`Could not load packages: ${error.message}`)
         return
@@ -177,6 +155,7 @@ function App() {
         setAuthError={setAuthError}
         packageError={packageError}
         setPackageError={setPackageError}
+        packageLoading={packageLoading}
         packageList={packageList}
         setPackageList={setPackageList}
       />
@@ -194,6 +173,7 @@ function AppShell({
   setAuthError,
   packageError,
   setPackageError,
+  packageLoading,
   packageList,
   setPackageList,
 }: Props & {
@@ -202,6 +182,7 @@ function AppShell({
   setAuthError: (message: string) => void
   packageError: string
   setPackageError: (message: string) => void
+  packageLoading: boolean
   packageList: PackageOption[]
   setPackageList: React.Dispatch<React.SetStateAction<PackageOption[]>>
 }) {
@@ -285,8 +266,8 @@ function AppShell({
 
       <main className="pb-16">
         <Routes>
-          <Route path="/" element={<HomePage packageList={packageList} />} />
-          <Route path="/packages" element={<PackagesPage packageList={packageList} />} />
+          <Route path="/" element={<HomePage packageList={packageList} packageLoading={packageLoading} />} />
+          <Route path="/packages" element={<PackagesPage packageList={packageList} packageLoading={packageLoading} />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
@@ -350,7 +331,7 @@ function AppShell({
               </div>
             </div>
             <p className="max-w-sm text-sm text-slate-400">
-              A fintech-styled publisher growth platform for manual WhatsApp Status advertising and review-based rewards.
+              Product packages with administrator-managed terms and reviewed reward calculations.
             </p>
           </div>
           <div>
@@ -408,21 +389,21 @@ function ProtectedRoute({
   return <>{children}</>
 }
 
-function HomePage({ packageList }: { packageList: PackageOption[] }) {
+function HomePage({ packageList, packageLoading }: { packageList: PackageOption[]; packageLoading: boolean }) {
   return (
     <>
       <section className="relative overflow-hidden bg-slate-950 text-white">
-        <div className="section-shell grid gap-10 py-18 md:grid-cols-[1.1fr_0.9fr] md:items-center">
+        <div className="section-shell py-20 md:py-28">
           <div>
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1 text-sm text-sky-100">
               <ShieldCheck className="h-4 w-4" />
-              Manual WhatsApp Status advertising, reviewed by admins
+              Product campaigns with administrator review
             </div>
             <h1 className="max-w-xl text-4xl font-black tracking-tight text-white md:text-6xl">
-              Turn your status views into a verified income stream.
+              Clear product packages. Transparent reward rates.
             </h1>
             <p className="mt-6 max-w-lg text-base text-slate-300 md:text-lg">
-              Earnwave connects publishers with campaigns, wallet funding, and fair approval workflows built for WhatsApp Status marketing.
+              Browse products configured by our administrators. Campaign submissions and rewards are reviewed using recorded rate rules.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
               <Link to="/register" className="primary-button bg-sky-500 hover:bg-sky-400">
@@ -433,71 +414,11 @@ function HomePage({ packageList }: { packageList: PackageOption[] }) {
               </Link>
             </div>
             <div className="mt-10 flex flex-wrap gap-6 text-sm text-slate-300">
-              <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-400" /> Secure wallet operations</div>
-              <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-400" /> Manual review approval</div>
-              <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-400" /> Real payouts</div>
+              <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-400" /> Admin-managed pricing</div>
+              <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-400" /> Rate snapshots per submission</div>
+              <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-400" /> Checkout coming later</div>
             </div>
           </div>
-
-          <div className="relative">
-            <div className="glass-card border-slate-700 bg-slate-900/90 p-5 text-slate-50 shadow-2xl shadow-sky-500/10">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-sky-200">Publisher overview</p>
-                  <h2 className="mt-2 text-2xl font-bold">Wallet health</h2>
-                </div>
-                <div className="rounded-full bg-emerald-500/15 p-2 text-emerald-400">
-                  <TrendingUp className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="rounded-2xl bg-slate-800 p-4">
-                  <div className="flex items-center justify-between text-sm text-slate-300">
-                    <span>Available balance</span>
-                    <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs font-semibold text-emerald-300">+12.4%</span>
-                  </div>
-                  <div className="mt-3 text-3xl font-black text-white">KSh 24,500</div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <StatsTile label="Approved views" value="18.4K" accent="sky" />
-                  <StatsTile label="Pending review" value="06" accent="amber" />
-                </div>
-
-                <div className="rounded-2xl border border-slate-700 bg-slate-800/80 p-4">
-                  <div className="mb-2 flex items-center justify-between text-sm text-slate-300">
-                    <span>Campaign completion</span>
-                    <span className="font-semibold text-sky-300">82%</span>
-                  </div>
-                  <div className="h-2.5 overflow-hidden rounded-full bg-slate-700">
-                    <div className="h-full w-[82%] rounded-full bg-gradient-to-r from-sky-500 to-teal-400" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section-shell py-16">
-        <div className="mb-8 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Platform stats</p>
-            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Built for transparent growth</h2>
-          </div>
-          <Link to="/packages" className="hidden items-center gap-2 text-sm font-semibold text-sky-700 md:inline-flex">
-            View packages <ChevronRight className="h-4 w-4" />
-          </Link>
-        </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          {publicStats.map((item) => (
-            <div key={item.label} className="stat-card">
-              <div className="text-sm text-slate-500">{item.label}</div>
-              <div className="mt-3 text-3xl font-black tracking-tight text-slate-900">{item.value}</div>
-              <div className="mt-2 inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">{item.trend}</div>
-            </div>
-          ))}
         </div>
       </section>
 
@@ -525,131 +446,111 @@ function HomePage({ packageList }: { packageList: PackageOption[] }) {
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Packages</p>
-            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Choose the right plan</h2>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Products configured by our team</h2>
           </div>
+          <Link to="/packages" className="hidden items-center gap-2 text-sm font-semibold text-sky-700 md:inline-flex">
+            View packages <ChevronRight className="h-4 w-4" />
+          </Link>
         </div>
         <div className="grid gap-5 lg:grid-cols-3">
-          {packageList.filter((item) => item.isActive !== false).map((item) => (
+          {packageList.filter((item) => item.isActive).slice(0, 3).map((item) => (
             <div
               key={item.id}
-              className={cn(
-                'glass-card flex h-full flex-col p-6',
-                item.featured && 'border-sky-300 bg-sky-50/80 shadow-xl shadow-sky-100',
-              )}
+              className="glass-card flex h-full flex-col overflow-hidden"
             >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">{item.badge}</div>
-                  <h3 className="mt-2 text-2xl font-black text-slate-900">{item.name}</h3>
+              {item.imagePath ? (
+                <img src={productImageUrl(item.imagePath)} alt={item.name} className="h-52 w-full object-cover" />
+              ) : (
+                <div className="flex h-52 items-center justify-center bg-slate-100 text-slate-400">
+                  <ImagePlus className="h-10 w-10" aria-hidden="true" />
                 </div>
-                {item.featured ? <div className="rounded-full bg-sky-600 px-2 py-1 text-xs font-semibold text-white">Popular</div> : null}
-              </div>
-              <div className="mb-4 text-4xl font-black tracking-tight text-slate-900">
-                KSh {item.price.toLocaleString()}
-              </div>
-              <p className="text-sm text-slate-600">{item.description}</p>
-              <div className="mt-5 flex items-center gap-2 text-sm text-slate-600">
-                <BriefcaseBusiness className="h-4 w-4 text-sky-600" />
-                <span>{item.campaigns} advertising products</span>
-              </div>
-              <ul className="mt-5 space-y-3">
-                {item.perks.map((perk) => (
-                  <li key={perk} className="flex items-start gap-3 text-sm text-slate-700">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                    <span>{perk}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-7 flex items-center gap-3 pt-4">
-                <Link to="/register" className="primary-button flex-1">
-                  Purchase plan
-                </Link>
-                <button type="button" className="secondary-button flex-1">
-                  View details
-                </button>
+              )}
+              <div className="flex flex-1 flex-col p-6">
+                <div className="flex items-center justify-between gap-3">
+                  {item.badge ? <div className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">{item.badge}</div> : <span />}
+                  {item.featured ? <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700">Featured</span> : null}
+                </div>
+                <h3 className="mt-2 text-2xl font-black text-slate-900">{item.name}</h3>
+                <p className="mt-3 text-sm text-slate-600">{item.description}</p>
+                <div className="mt-4 text-2xl font-black tracking-tight text-slate-900">KSh {item.price.toLocaleString()}</div>
+                <p className="mt-auto pt-5 text-sm text-slate-500">Checkout will be available after payment integration.</p>
               </div>
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="bg-slate-900 py-16 text-white">
-        <div className="section-shell grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-300">Live activity feed</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-white">Recent platform activity</h2>
-            <p className="mt-3 max-w-md text-slate-300">
-              This demonstration feed is intentionally fictional and structured so genuine events can later be connected to Supabase Realtime.
-            </p>
-          </div>
-
-          <div className="glass-card border-slate-700 bg-slate-900/70 p-5 text-white shadow-2xl shadow-sky-500/10">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 font-semibold text-slate-200">
-                <Bell className="h-4 w-4 text-sky-400" /> Activity stream
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-300">
-                <div className="h-2 w-2 rounded-full bg-emerald-400" /> Live demo
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {activityFeed.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-800/80 p-3">
-                  <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/15 text-sky-300">
-                    {item.kind === 'account' ? <UserPlus className="h-4 w-4" /> : null}
-                    {item.kind === 'package' ? <BriefcaseBusiness className="h-4 w-4" /> : null}
-                    {item.kind === 'deposit' ? <CreditCard className="h-4 w-4" /> : null}
-                    {item.kind === 'submission' ? <UploadCloud className="h-4 w-4" /> : null}
-                    {item.kind === 'earning' ? <CircleDollarSign className="h-4 w-4" /> : null}
-                    {item.kind === 'success' ? <CheckCircle2 className="h-4 w-4" /> : null}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-slate-100">
-                      <span className="font-semibold text-white">{item.user}</span> {item.action}
-                    </p>
-                    <div className="mt-1 text-xs text-slate-400">{item.time}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {packageLoading ? <p className="mt-6 text-center text-slate-500">Loading products…</p> : null}
+        {!packageLoading && packageList.filter((item) => item.isActive).length === 0 ? (
+          <p className="mt-6 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-600">
+            No products are available yet.
+          </p>
+        ) : null}
       </section>
     </>
   )
 }
 
-function PackagesPage({ packageList }: { packageList: PackageOption[] }) {
+function PackagesPage({ packageList, packageLoading }: { packageList: PackageOption[]; packageLoading: boolean }) {
   return (
     <section className="section-shell py-16">
       <div className="mx-auto max-w-2xl text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Packages</p>
         <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">Publisher packages</h1>
       </div>
-      <div className="mt-10 grid gap-5 lg:grid-cols-3">
-        {packageList.filter((item) => item.isActive !== false).map((item) => (
-          <div key={item.id} className="glass-card p-6">
-            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">{item.badge}</div>
-            <h2 className="mt-3 text-3xl font-black text-slate-900">KSh {item.price.toLocaleString()}</h2>
-            <div className="mt-2 text-xl font-bold text-slate-800">{item.name}</div>
-            <p className="mt-4 text-sm text-slate-600">{item.description}</p>
-            <ul className="mt-5 space-y-3 text-sm text-slate-700">
-              {item.perks.map((perk) => (
-                <li key={perk} className="flex items-center gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  {perk}
-                </li>
-              ))}
-            </ul>
-            <button type="button" className="primary-button mt-7 w-full">
-              Purchase {item.name}
-            </button>
-          </div>
-        ))}
-      </div>
+      <ProductList packageList={packageList.filter((item) => item.isActive)} packageLoading={packageLoading} />
+      <p className="mt-8 text-center text-sm text-slate-500">Package checkout is not enabled yet; payment integration will be added later.</p>
     </section>
   )
+}
+
+function ProductList({ packageList, packageLoading }: { packageList: PackageOption[]; packageLoading: boolean }) {
+  if (packageLoading) {
+    return <p className="mt-10 text-center text-slate-500">Loading packages…</p>
+  }
+  if (packageList.length === 0) {
+    return <p className="mt-10 rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-600">No products are available yet.</p>
+  }
+
+  return (
+    <div className="mt-10 grid gap-5 lg:grid-cols-3">
+      {packageList.map((item) => (
+        <article key={item.id} className="glass-card flex flex-col overflow-hidden">
+          {item.imagePath ? (
+            <img src={productImageUrl(item.imagePath)} alt={item.name} className="h-56 w-full object-cover" />
+          ) : (
+            <div className="flex h-56 items-center justify-center bg-slate-100 text-slate-400">
+              <ImagePlus className="h-10 w-10" aria-hidden="true" />
+            </div>
+          )}
+          <div className="flex flex-1 flex-col p-6">
+            {item.badge ? <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">{item.badge}</p> : null}
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="mt-2 text-2xl font-black text-slate-900">{item.name}</h2>
+              {item.featured ? <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-semibold text-sky-700">Featured</span> : null}
+            </div>
+            <p className="mt-3 text-sm text-slate-600">{item.description}</p>
+            <p className="mt-5 text-3xl font-black text-slate-900">KSh {item.price.toLocaleString()}</p>
+            <p className="mt-2 text-sm text-slate-600">{item.campaigns} campaigns included</p>
+            <p className="mt-1 text-sm text-slate-600">{formatKsh(item.rewardPer100Views ?? 0)} per 100 approved views</p>
+            {item.perks.length > 0 ? (
+              <ul className="mt-5 space-y-3 text-sm text-slate-700">
+                {item.perks.map((perk) => (
+                  <li key={perk} className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    {perk}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="mt-auto pt-6 text-sm text-slate-500">Checkout will be available after payment integration.</p>
+          </div>
+        </article>
+      ))}
+    </div>
+  )
+}
+
+function productImageUrl(path: string) {
+  return supabase?.storage.from('product-images').getPublicUrl(path).data.publicUrl ?? ''
 }
 
 function HowItWorksPage() {
@@ -680,7 +581,7 @@ function AboutPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">About us</p>
           <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">Built for trust, growth, and clear rewards.</h1>
           <p className="mt-5 text-lg text-slate-600">
-            Earnwave Solution helps marketers and publishers coordinate ad campaigns without ambiguity. Publishers purchase packages, share branded materials through WhatsApp Status, and submit proof for manual review before earnings are approved.
+            Earnwave Solution is building a platform for administrators to publish product packages and reward rules, with evidence reviewed before rewards are calculated.
           </p>
         </div>
 
@@ -703,34 +604,10 @@ function AboutPage() {
 function ContactPage() {
   return (
     <section className="section-shell py-16">
-      <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="glass-card p-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Contact us</p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">We are here to help.</h1>
-          <div className="mt-6 space-y-4 text-sm text-slate-600">
-            <div className="flex items-center gap-3"><Mail className="h-5 w-5 text-sky-600" /> support@earnwave.co.ke</div>
-            <div className="flex items-center gap-3"><Smartphone className="h-5 w-5 text-sky-600" /> +254 700 123 456</div>
-            <div className="flex items-center gap-3"><Building2 className="h-5 w-5 text-sky-600" /> Nairobi, Kenya</div>
-          </div>
-        </div>
-
-        <div className="glass-card p-6">
-          <form className="grid gap-5">
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Full name</label>
-              <input className="input-field" placeholder="Your name" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Email</label>
-              <input className="input-field" type="email" placeholder="you@example.com" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Message</label>
-              <textarea className="input-field min-h-28" placeholder="How can we help you?" />
-            </div>
-            <button type="button" className="primary-button w-full md:w-auto">Send message</button>
-          </form>
-        </div>
+      <div className="mx-auto max-w-2xl glass-card p-8 text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Contact</p>
+        <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">Support details will be added soon.</h1>
+        <p className="mt-4 text-slate-600">We have not configured a support address or contact form yet.</p>
       </div>
     </section>
   )
@@ -746,13 +623,13 @@ function LegalPage({ title }: { title: string }) {
             Earnwave Solutions is a digital platform that connects publishers with campaign opportunities and review-based reward flows. The platform is intended for users to purchase packages, share assigned materials on their WhatsApp Status, and submit evidence for administrator review.
           </p>
           <p>
-            All payments, deposits, and withdrawal requests are subject to verification, anti-fraud checks, and administrative approval. Users must ensure that screenshots and evidence are genuine, matching platform instructions, and not manipulated in any way.
+            Package prices and reward rates are displayed as configured by administrators. Checkout, deposits, and withdrawals are not available yet. Users must ensure that any submitted evidence is genuine and matches the applicable campaign instructions.
           </p>
           <p>
             Administrators reserve the right to reject submissions, suspend accounts, and reverse payments if dishonest conduct, fraudulent evidence, or platform policy violations are detected. Users agree to maintain accurate profile details, including valid Kenyan phone numbers and complete account information.
           </p>
           <p>
-            The platform does not automatically retrieve WhatsApp Status views. Manual status posting is required and all views only become eligible for payout after administrative approval. The demonstration content on this site uses sample activity and fictional user identifiers for design testing and launch previews.
+            The platform does not automatically retrieve WhatsApp Status views. Submitted views require administrator approval, and any reward calculation uses the rate captured for that submission.
           </p>
         </div>
       </div>
@@ -828,8 +705,8 @@ function LoginPage({
           </p>
           <div className="mt-8 space-y-4 text-sm text-sky-50">
             <div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-300" /> Secure account access</div>
-            <div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-300" /> Real-time reward tracking</div>
-            <div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-300" /> Simple submission review</div>
+            <div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-300" /> Configured reward rates</div>
+            <div className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-300" /> Administrator review</div>
           </div>
         </div>
 
@@ -978,7 +855,7 @@ function RegisterPage({
         <form className="grid gap-5 md:grid-cols-2" onSubmit={(event) => void handleRegister(event)}>
           <div className="md:col-span-1">
             <label className="text-sm font-semibold text-slate-700">Full name</label>
-            <input className="input-field" name="full_name" required autoComplete="name" placeholder="Jane Wanjiku" />
+            <input className="input-field" name="full_name" required autoComplete="name" placeholder="Your full name" />
           </div>
           <div className="md:col-span-1">
             <label className="text-sm font-semibold text-slate-700">Username</label>
@@ -1003,8 +880,8 @@ function RegisterPage({
             <button type="button" onClick={() => setShowConfirm((open) => !open)} className="absolute right-3 top-[2.5rem] text-xs font-semibold text-slate-500">{showConfirm ? 'Hide' : 'Show'}</button>
           </div>
 
-          <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-            Password strength: strong • 12+ chars • includes number and symbol
+          <div className="md:col-span-2 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-700">
+            Choose a password with at least 12 characters.
           </div>
 
           <div className="md:col-span-2 flex items-center justify-between gap-4">
@@ -1026,108 +903,131 @@ function RegisterPage({
 }
 
 function PublisherDashboard() {
+  const [publisherName, setPublisherName] = useState('')
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [submissions, setSubmissions] = useState<PublisherSubmission[]>([])
+  const [isLoading, setIsLoading] = useState(Boolean(supabase))
+  const [loadError, setLoadError] = useState(supabase ? '' : 'Connect Supabase to load your account data.')
+
+  useEffect(() => {
+    let active = true
+    const loadDashboard = async () => {
+      if (!supabase) {
+        return
+      }
+
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        if (active) {
+          setLoadError(userError?.message ?? 'Could not load your signed-in account.')
+          setIsLoading(false)
+        }
+        return
+      }
+
+      const userId = userData.user.id
+      const [profileResult, walletResult, submissionResult] = await Promise.all([
+        supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle(),
+        supabase.from('wallets').select('balance').eq('user_id', userId).maybeSingle(),
+        supabase
+          .from('submissions')
+          .select('id, status, views_count, payout_amount, reward_rate_snapshot, created_at, campaigns(title)')
+          .eq('publisher_id', userId)
+          .order('created_at', { ascending: false }),
+      ])
+
+      if (!active) return
+      const error = profileResult.error ?? walletResult.error ?? submissionResult.error
+      if (error) {
+        setLoadError(error.message)
+      } else {
+        setPublisherName(profileResult.data?.full_name ?? '')
+        setWalletBalance(Number(walletResult.data?.balance ?? 0))
+        setSubmissions((submissionResult.data ?? []) as PublisherSubmission[])
+      }
+      setIsLoading(false)
+    }
+
+    void loadDashboard()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const approvedSubmissions = submissions.filter((submission) => submission.status === 'approved')
+  const pendingCount = submissions.filter((submission) => submission.status === 'pending').length
+
   return (
     <section className="section-shell py-12">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Publisher dashboard</p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">Welcome back, Miriam</h1>
+          <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">
+            {publisherName ? `Welcome, ${publisherName}` : 'Your account'}
+          </h1>
         </div>
-        <button type="button" className="primary-button">
-          <WalletCards className="mr-2 h-4 w-4" /> Wallet top-up
-        </button>
+        <span className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-600">Payments coming later</span>
       </div>
 
       <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {publisherOverview.map((item) => (
-          <div key={item.label} className="stat-card">
-            <div className="text-sm text-slate-500">{item.label}</div>
-            <div className="mt-3 text-2xl font-black text-slate-900">{item.value}</div>
-            <div className="mt-2 text-xs text-slate-500">{item.change}</div>
-          </div>
-        ))}
+        <DashboardStat label="Wallet balance" value={walletBalance === null ? '—' : formatKsh(walletBalance)} />
+        <DashboardStat label="Submissions" value={isLoading ? '—' : String(submissions.length)} />
+        <DashboardStat label="Awaiting review" value={isLoading ? '—' : String(pendingCount)} />
+        <DashboardStat
+          label="Approved rewards"
+          value={isLoading ? '—' : formatKsh(approvedSubmissions.reduce((total, item) => total + Number(item.payout_amount), 0))}
+        />
       </div>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="glass-card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Campaign queue</h2>
-            <button type="button" className="secondary-button">View all</button>
-          </div>
-          <div className="space-y-4">
-            {campaignQueue.map((item) => (
-              <div key={item.name} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <div className="font-semibold text-slate-900">{item.name}</div>
-                  <div className="mt-1 text-sm text-slate-500">{item.status} • {item.due}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-sky-700">{item.reward}</div>
-                  <button type="button" className="mt-2 secondary-button px-3 py-2 text-xs">Open</button>
-                </div>
+      {loadError ? <p role="alert" className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{loadError}</p> : null}
+      <div className="mt-8 glass-card p-6">
+        <h2 className="text-xl font-bold text-slate-900">Your submissions</h2>
+        {isLoading ? <p className="mt-4 text-sm text-slate-500">Loading your submissions…</p> : null}
+        {!isLoading && !loadError && submissions.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">You do not have any submissions yet.</p>
+        ) : null}
+        <div className="mt-4 divide-y divide-slate-200">
+          {submissions.map((submission) => (
+            <div key={submission.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <div>
+                <p className="font-semibold text-slate-900">{submission.campaigns?.[0]?.title ?? 'Campaign submission'}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {new Date(submission.created_at).toLocaleDateString()} · {submission.views_count.toLocaleString()} approved views
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="glass-card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Quick actions</h2>
-          </div>
-          <div className="space-y-3">
-            <button type="button" className="secondary-button w-full justify-between"><span>Submit evidence</span><UploadCloud className="h-4 w-4" /></button>
-            <button type="button" className="secondary-button w-full justify-between"><span>View downloadable assets</span><Download className="h-4 w-4" /></button>
-            <button type="button" className="secondary-button w-full justify-between"><span>Request withdrawal</span><CircleDollarSign className="h-4 w-4" /></button>
-            <button type="button" className="secondary-button w-full justify-between"><span>Campaign performance</span><BarChart3 className="h-4 w-4" /></button>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        <div className="glass-card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Recent submissions</h2>
-            <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">Needs attention</span>
-          </div>
-          <div className="space-y-3">
-            {recentSubmissions.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-                <div>
-                  <div className="font-semibold text-slate-900">{item.campaign}</div>
-                  <div className="text-xs text-slate-500">{item.id} • {item.date}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-slate-900">{item.amount}</div>
-                  <div className={cn('mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold', item.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : item.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700')}>{item.status}</div>
-                </div>
+              <div className="text-right">
+                <p className="font-semibold text-slate-900">{formatKsh(Number(submission.payout_amount))}</p>
+                <p className="mt-1 text-xs capitalize text-slate-500">{submission.status.replace('_', ' ')}</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="glass-card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Withdrawal history</h2>
-            <span className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700"><Gauge className="h-4 w-4" /> Fast lane</span>
-          </div>
-          <div className="space-y-3">
-            {withdrawalHistory.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-                <div>
-                  <div className="font-semibold text-slate-900">{item.id}</div>
-                  <div className="text-xs text-slate-500">{item.date}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold text-slate-900">{item.amount}</div>
-                  <div className="text-xs text-slate-500">{item.status}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   )
+}
+
+type PublisherSubmission = {
+  id: string
+  status: string
+  views_count: number
+  payout_amount: number | string
+  reward_rate_snapshot: number | string | null
+  created_at: string
+  campaigns: { title: string }[] | null
+}
+
+function DashboardStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="stat-card">
+      <div className="text-sm text-slate-500">{label}</div>
+      <div className="mt-3 text-2xl font-black text-slate-900">{value}</div>
+    </div>
+  )
+}
+
+function formatKsh(value: number) {
+  return `KSh ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function AdminDashboard({
@@ -1141,19 +1041,26 @@ function AdminDashboard({
 }) {
   const emptyPackage = {
     name: '',
-    price: '1500',
-    campaigns: '5',
-    rewardPer100Views: '18',
+    price: '',
+    campaigns: '',
+    rewardPer100Views: '',
     description: '',
-    badge: 'Admin created',
+    badge: '',
     featured: false,
   }
   const [newPackage, setNewPackage] = useState({
     ...emptyPackage,
   })
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null)
+  const [imagePath, setImagePath] = useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [formError, setFormError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => () => {
+    if (imagePreview?.startsWith('blob:')) URL.revokeObjectURL(imagePreview)
+  }, [imagePreview])
 
   const handleSavePackage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -1163,10 +1070,10 @@ function AdminDashboard({
     const price = Number(newPackage.price)
     const campaigns = Number(newPackage.campaigns)
     const rewardPer100Views = Number(newPackage.rewardPer100Views)
-    if (!packageName || !newPackage.description.trim() || !Number.isFinite(price) || price <= 0 ||
+    if (!packageName || !newPackage.description.trim() || (!imagePath && !selectedImage) || !Number.isFinite(price) || price <= 0 ||
       !Number.isInteger(campaigns) || campaigns < 1 ||
       !Number.isFinite(rewardPer100Views) || rewardPer100Views < 0) {
-      setFormError('Enter a package name and description, a price above zero, at least one campaign, and a non-negative reward rate.')
+      setFormError('Add a name, description, product image, valid price, at least one campaign, and a non-negative reward rate.')
       return
     }
 
@@ -1176,6 +1083,28 @@ function AdminDashboard({
     }
 
     setIsSaving(true)
+    let uploadedImagePath: string | null = null
+    const previousImagePath = imagePath
+
+    if (selectedImage) {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        setFormError(userError?.message ?? 'Could not verify the administrator account.')
+        setIsSaving(false)
+        return
+      }
+
+      const extension = selectedImage.type === 'image/jpeg' ? 'jpg' : selectedImage.type.split('/')[1]
+      uploadedImagePath = `${userData.user.id}/${crypto.randomUUID()}.${extension}`
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(uploadedImagePath, selectedImage, { contentType: selectedImage.type, upsert: false })
+      if (uploadError) {
+        setFormError(`Could not upload the product image: ${uploadError.message}`)
+        setIsSaving(false)
+        return
+      }
+    }
 
     const packageData = {
       name: packageName,
@@ -1185,6 +1114,7 @@ function AdminDashboard({
       badge: newPackage.badge.trim() || 'Admin created',
       featured: newPackage.featured,
       reward_per_100_views: rewardPer100Views,
+      image_path: uploadedImagePath ?? imagePath,
       perks: [
         `${campaigns} campaign bundles`,
         `${rewardPer100Views} KSh per 100 approved views`,
@@ -1192,13 +1122,18 @@ function AdminDashboard({
       ],
     }
 
-    const selectedColumns = 'id, name, price, description, campaigns_count, badge, featured, reward_per_100_views, perks, is_active'
+    const selectedColumns = 'id, name, price, description, campaigns_count, badge, featured, reward_per_100_views, perks, image_path, is_active'
     const result = editingPackageId
       ? await supabase.from('packages').update(packageData).eq('id', editingPackageId).select(selectedColumns).single()
       : await supabase.from('packages').insert({ ...packageData, is_active: true }).select(selectedColumns).single()
 
     if (result.error || !result.data) {
-      setFormError(result.error?.message ?? 'Could not save this package.')
+      let cleanupMessage = ''
+      if (uploadedImagePath) {
+        const { error: cleanupError } = await supabase.storage.from('product-images').remove([uploadedImagePath])
+        if (cleanupError) cleanupMessage = ` The uploaded image also needs cleanup: ${cleanupError.message}`
+      }
+      setFormError(`${result.error?.message ?? 'Could not save this package.'}${cleanupMessage}`)
       setIsSaving(false)
       return
     }
@@ -1207,8 +1142,15 @@ function AdminDashboard({
     setPackageList((current) => editingPackageId
       ? current.map((item) => item.id === savedPackage.id ? savedPackage : item)
       : [savedPackage, ...current])
+    if (uploadedImagePath && previousImagePath) {
+      const { error: removeError } = await supabase.storage.from('product-images').remove([previousImagePath])
+      if (removeError) setPackageError(`Package saved, but the previous image could not be removed: ${removeError.message}`)
+    }
     setEditingPackageId(null)
     setNewPackage({ ...emptyPackage })
+    setImagePath(null)
+    setSelectedImage(null)
+    setImagePreview(null)
     setIsSaving(false)
   }
 
@@ -1224,6 +1166,9 @@ function AdminDashboard({
       badge: item.badge,
       featured: Boolean(item.featured),
     })
+    setImagePath(item.imagePath)
+    setSelectedImage(null)
+    setImagePreview(null)
   }
 
   const togglePackageActive = async (item: PackageOption) => {
@@ -1252,22 +1197,11 @@ function AdminDashboard({
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">Admin dashboard</p>
-          <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">Platform oversight</h1>
+          <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">Products and submission reviews</h1>
         </div>
-        <button type="button" className="primary-button"><FileText className="mr-2 h-4 w-4" /> Create campaign</button>
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {adminSummary.map((item) => (
-          <div key={item.label} className="stat-card">
-            <div className="text-sm text-slate-500">{item.label}</div>
-            <div className="mt-3 text-2xl font-black text-slate-900">{item.value}</div>
-            <div className="mt-2 text-xs text-slate-500">{item.change}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="mt-8">
         <div className="glass-card p-6">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900">Package management</h2>
@@ -1343,6 +1277,39 @@ function AdminDashboard({
                 placeholder="Describe package benefits and who it is for"
               />
             </div>
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold text-slate-700">Product image</label>
+              <input
+                className="input-field"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                required={!imagePath}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  if (file && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+                    setFormError('Choose a JPEG, PNG, or WebP image.')
+                    event.target.value = ''
+                    return
+                  }
+                  if (file && file.size > 5 * 1024 * 1024) {
+                    setFormError('Product images must be 5 MB or smaller.')
+                    event.target.value = ''
+                    return
+                  }
+                  setFormError('')
+                  setSelectedImage(file)
+                  setImagePreview(file ? URL.createObjectURL(file) : null)
+                }}
+              />
+              <p className="mt-1 text-xs text-slate-500">JPEG, PNG, or WebP. Maximum file size: 5 MB.</p>
+              {imagePreview || imagePath ? (
+                <img
+                  src={imagePreview ?? productImageUrl(imagePath ?? '')}
+                  alt="Selected product preview"
+                  className="mt-3 h-40 w-full rounded-xl object-cover md:max-w-sm"
+                />
+              ) : null}
+            </div>
           </div>
 
           <label className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -1364,6 +1331,9 @@ function AdminDashboard({
                 onClick={() => {
                   setEditingPackageId(null)
                   setNewPackage({ ...emptyPackage })
+                  setImagePath(null)
+                  setSelectedImage(null)
+                  setImagePreview(null)
                   setFormError('')
                 }}
                 className="secondary-button"
@@ -1380,6 +1350,7 @@ function AdminDashboard({
               <thead className="bg-slate-50 text-xs uppercase tracking-[0.18em] text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Package</th>
+                  <th className="px-4 py-3">Image</th>
                   <th className="px-4 py-3">Price</th>
                   <th className="px-4 py-3">Reward rule</th>
                   <th className="px-4 py-3">Status</th>
@@ -1392,6 +1363,11 @@ function AdminDashboard({
                     <td className="px-4 py-3">
                       <div className="font-semibold text-slate-900">{item.name}</div>
                       <div className="text-slate-500">{item.badge}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.imagePath ? (
+                        <img src={productImageUrl(item.imagePath)} alt="" className="h-12 w-16 rounded-lg object-cover" />
+                      ) : <span className="text-slate-400">No image</span>}
                     </td>
                     <td className="px-4 py-3 text-slate-700">KSh {item.price.toLocaleString()}</td>
                     <td className="px-4 py-3 text-slate-700">{item.rewardPer100Views ?? 0} KSh / 100 views</td>
@@ -1408,139 +1384,260 @@ function AdminDashboard({
                     </td>
                   </tr>
                 ))}
+                {packageList.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">No packages yet. Create the first one above.</td></tr>
+                ) : null}
               </tbody>
             </table>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="glass-card p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Publisher management</h2>
-              <div className="relative w-44">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input className="input-field pl-9" placeholder="Search publishers" />
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-slate-200">
-              <table className="min-w-full border-collapse text-left">
-                <thead className="bg-slate-50 text-xs uppercase tracking-[0.18em] text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Publisher</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Balance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {publisherTable.map((publisher) => (
-                    <tr key={publisher.username} className="border-t border-slate-200 text-sm">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-900">{publisher.name}</div>
-                        <div className="text-slate-500">{publisher.username}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn('inline-flex rounded-full px-2 py-1 font-semibold', publisher.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>{publisher.status}</span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{publisher.balance}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="glass-card p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Review queue</h2>
-              <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700"><Eye className="h-3.5 w-3.5" /> 87 pending</span>
-            </div>
-            <div className="space-y-3">
-              {reviewQueue.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-semibold text-slate-900">{item.publisher}</div>
-                    <span className={cn('rounded-full px-2 py-1 text-[10px] font-semibold', item.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' : item.status === 'Escalated' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700')}>{item.status}</span>
-                  </div>
-                  <div className="mt-2 text-sm text-slate-600">{item.campaign}</div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                    <span>{item.score}</span>
-                    <span>{item.amount}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
+      <SubmissionReviewQueue />
+      <PricingAuditLog />
+    </section>
+  )
+}
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-2">
-        <div className="glass-card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Withdrawal approvals</h2>
-            <button type="button" className="secondary-button">Export</button>
-          </div>
-          <div className="space-y-3">
-            {withdrawalRequests.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-                <div>
-                  <div className="font-semibold text-slate-900">{item.publisher}</div>
-                  <div className="text-xs text-slate-500">{item.id}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold text-slate-900">{item.amount}</div>
-                  <div className={cn('mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold', item.status === 'Pending' ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700')}>{item.status}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+type ReviewSubmission = {
+  id: string
+  publisher_id: string
+  image_url: string | null
+  notes: string | null
+  status: string
+  created_at: string
+  reward_rate_snapshot: number | string | null
+  publisher: { full_name: string; username: string }[] | null
+  campaigns: { title: string }[] | null
+}
 
-        <div className="glass-card p-6">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Fraud and policy checks</h2>
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"><ShieldCheck className="h-3.5 w-3.5" /> Operational</div>
-          </div>
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between text-sm text-slate-700">
-                <span>Approval accuracy</span>
-                <span className="font-semibold text-slate-900">96.4%</span>
+function SubmissionReviewQueue() {
+  const [submissions, setSubmissions] = useState<ReviewSubmission[]>([])
+  const [viewsBySubmission, setViewsBySubmission] = useState<Record<string, string>>({})
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({})
+  const [isLoading, setIsLoading] = useState(Boolean(supabase))
+  const [busySubmissionId, setBusySubmissionId] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState(supabase ? '' : 'Connect Supabase to review submissions.')
+  const [successMessage, setSuccessMessage] = useState('')
+
+  const loadSubmissions = async () => {
+    if (!supabase) {
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('id, publisher_id, image_url, notes, status, created_at, reward_rate_snapshot, publisher:profiles!submissions_publisher_id_fkey(full_name, username), campaigns(title)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      setErrorMessage(error.message)
+    } else {
+      setErrorMessage('')
+      setSubmissions((data ?? []) as ReviewSubmission[])
+    }
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => void loadSubmissions(), 0)
+    return () => window.clearTimeout(timerId)
+  }, [])
+
+  const submitReview = async (submission: ReviewSubmission, decision: 'approved' | 'rejected') => {
+    setErrorMessage('')
+    setSuccessMessage('')
+    if (!supabase) {
+      setErrorMessage('Connect Supabase to review submissions.')
+      return
+    }
+
+    const rawViews = viewsBySubmission[submission.id] ?? ''
+    const views = Number(rawViews)
+    if (decision === 'approved' && (!rawViews.trim() || !Number.isInteger(views) || views < 0)) {
+      setErrorMessage('Enter a non-negative whole number of approved views.')
+      return
+    }
+
+    setBusySubmissionId(submission.id)
+    const { data, error } = await supabase.rpc('review_submission', {
+      p_submission_id: submission.id,
+      p_decision: decision,
+      p_views_count: decision === 'approved' ? views : 0,
+      p_review_notes: reviewNotes[submission.id]?.trim() || null,
+    })
+
+    if (error) {
+      setErrorMessage(error.message)
+    } else {
+      setSuccessMessage(decision === 'approved'
+        ? `Submission approved. Server-calculated reward: ${formatKsh(Number(data ?? 0))}.`
+        : 'Submission rejected.')
+      await loadSubmissions()
+    }
+    setBusySubmissionId(null)
+  }
+
+  return (
+    <section className="mt-8 glass-card p-6">
+      <div className="mb-5">
+        <h2 className="text-xl font-bold text-slate-900">Submission review</h2>
+        <p className="mt-1 text-sm text-slate-500">The server calculates approved rewards using the rate captured when evidence was submitted.</p>
+      </div>
+      {errorMessage ? <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{errorMessage}</p> : null}
+      {successMessage ? <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{successMessage}</p> : null}
+      {isLoading ? <p className="text-sm text-slate-500">Loading pending submissions…</p> : null}
+      {!isLoading && !errorMessage && submissions.length === 0 ? (
+        <p className="text-sm text-slate-500">There are no pending submissions.</p>
+      ) : null}
+      <div className="space-y-4">
+        {submissions.map((submission) => (
+          <article key={submission.id} className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-slate-900">{submission.campaigns?.[0]?.title ?? 'Campaign submission'}</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {submission.publisher?.[0]?.full_name ?? submission.publisher?.[0]?.username ?? 'Publisher'} · {new Date(submission.created_at).toLocaleString()}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {submission.reward_rate_snapshot === null
+                    ? 'Reward rate snapshot unavailable'
+                    : `Captured rate: ${formatKsh(Number(submission.reward_rate_snapshot))} per 100 views`}
+                </p>
+                {submission.notes ? <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{submission.notes}</p> : null}
               </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full w-[96%] rounded-full bg-gradient-to-r from-emerald-500 to-teal-500" />
-              </div>
+              {submission.image_url ? (
+                <a href={submission.image_url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-sky-700">
+                  View submitted evidence
+                </a>
+              ) : null}
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between text-sm text-slate-700">
-                <span>Manual review SLA</span>
-                <span className="font-semibold text-slate-900">3.2 hrs</span>
-              </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full w-[78%] rounded-full bg-gradient-to-r from-sky-500 to-cyan-400" />
-              </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1.5fr_auto_auto] md:items-end">
+              <label className="text-sm font-semibold text-slate-700">
+                Approved views
+                <input
+                  className="input-field mt-1"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={viewsBySubmission[submission.id] ?? ''}
+                  onChange={(event) => setViewsBySubmission((current) => ({ ...current, [submission.id]: event.target.value }))}
+                />
+              </label>
+              <label className="text-sm font-semibold text-slate-700">
+                Review notes
+                <input
+                  className="input-field mt-1"
+                  value={reviewNotes[submission.id] ?? ''}
+                  onChange={(event) => setReviewNotes((current) => ({ ...current, [submission.id]: event.target.value }))}
+                  placeholder="Optional"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={busySubmissionId === submission.id}
+                onClick={() => void submitReview(submission, 'approved')}
+                className="primary-button disabled:opacity-60"
+              >
+                Approve and calculate
+              </button>
+              <button
+                type="button"
+                disabled={busySubmissionId === submission.id}
+                onClick={() => void submitReview(submission, 'rejected')}
+                className="secondary-button disabled:opacity-60"
+              >
+                Reject
+              </button>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center justify-between text-sm text-slate-700">
-                <span>Fraud alerts</span>
-                <span className="font-semibold text-slate-900">07</span>
-              </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full w-[52%] rounded-full bg-gradient-to-r from-amber-400 to-orange-500" />
-              </div>
-            </div>
-          </div>
-        </div>
+          </article>
+        ))}
       </div>
     </section>
   )
 }
 
-function StatsTile({ label, value, accent }: { label: string; value: string; accent: 'sky' | 'amber' }) {
+type PackageRateAuditRecord = {
+  id: string
+  package_name: string
+  action: 'created' | 'rate_changed'
+  old_price: number | string | null
+  new_price: number | string
+  old_reward_rate: number | string | null
+  new_reward_rate: number | string
+  created_at: string
+  profiles: { full_name: string; username: string }[] | null
+}
+
+function PricingAuditLog() {
+  const [records, setRecords] = useState<PackageRateAuditRecord[]>([])
+  const [isLoading, setIsLoading] = useState(Boolean(supabase))
+  const [errorMessage, setErrorMessage] = useState(supabase ? '' : 'Connect Supabase to view pricing history.')
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      if (!supabase) return
+      void supabase
+        .from('package_rate_audit')
+        .select('id, package_name, action, old_price, new_price, old_reward_rate, new_reward_rate, created_at, profiles!package_rate_audit_actor_id_fkey(full_name, username)')
+        .order('created_at', { ascending: false })
+        .limit(25)
+        .then(({ data, error }) => {
+          if (error) {
+            setErrorMessage(error.message)
+          } else {
+            setErrorMessage('')
+            setRecords((data ?? []) as PackageRateAuditRecord[])
+          }
+          setIsLoading(false)
+        })
+    }, 0)
+    return () => window.clearTimeout(timerId)
+  }, [])
+
   return (
-    <div className={cn('rounded-2xl p-4', accent === 'sky' ? 'bg-sky-500/10 text-sky-200' : 'bg-amber-500/10 text-amber-200')}>
-      <div className="text-xs uppercase tracking-[0.2em] text-current/80">{label}</div>
-      <div className="mt-2 text-2xl font-black text-white">{value}</div>
-    </div>
+    <section className="mt-8 glass-card p-6">
+      <div className="mb-5">
+        <h2 className="text-xl font-bold text-slate-900">Package pricing history</h2>
+        <p className="mt-1 text-sm text-slate-500">The database keeps this record append-only. Showing the most recent 25 entries.</p>
+      </div>
+      {errorMessage ? <p role="alert" className="mb-4 text-sm text-rose-700">{errorMessage}</p> : null}
+      {isLoading ? <p className="text-sm text-slate-500">Loading pricing history…</p> : null}
+      {!isLoading && !errorMessage && records.length === 0 ? <p className="text-sm text-slate-500">No package pricing changes have been recorded.</p> : null}
+      {records.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-[0.16em] text-slate-500">
+              <tr>
+                <th className="px-3 py-3">Package</th>
+                <th className="px-3 py-3">Change</th>
+                <th className="px-3 py-3">Price (KSh)</th>
+                <th className="px-3 py-3">Reward / 100 views</th>
+                <th className="px-3 py-3">Changed by</th>
+                <th className="px-3 py-3">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => (
+                <tr key={record.id} className="border-t border-slate-200">
+                  <td className="px-3 py-3 font-semibold text-slate-900">{record.package_name}</td>
+                  <td className="px-3 py-3 capitalize text-slate-600">{record.action.replace('_', ' ')}</td>
+                  <td className="px-3 py-3 text-slate-600">
+                    {record.old_price === null ? '—' : Number(record.old_price).toLocaleString()} → {Number(record.new_price).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">
+                    {record.old_reward_rate === null ? '—' : Number(record.old_reward_rate).toLocaleString()} → {Number(record.new_reward_rate).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-3 text-slate-600">{record.profiles?.[0]?.full_name ?? record.profiles?.[0]?.username ?? 'Database operation'}</td>
+                  <td className="px-3 py-3 text-slate-600">{new Date(record.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
   )
 }
 

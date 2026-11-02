@@ -1,32 +1,36 @@
-# React + TypeScript + Vite
+# Earnwave Solution
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Earnwave is a publisher platform with admin-managed product packages, uploaded product images, and database-calculated submission rewards.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Install dependencies with `npm install`.
+2. Copy the Supabase project URL and anon key into a local `.env` file:
 
-## React Compiler
+   ```env
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+3. Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor. It creates the tables, role and row-level security rules, the public `product-images` storage bucket, pricing history, reward snapshots, and review/order functions. It also removes unreferenced legacy sample packages.
+4. Create an admin user in Supabase Auth. Promote the account using the SQL Editor:
 
-## Expanding the Oxlint configuration
+   ```sql
+   update public.profiles
+   set role = 'admin'
+   where id = (
+     select id from auth.users where email = 'admin@example.com'
+   );
+   ```
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+   Public registration creates publisher accounts only. Role changes must be made through trusted database access.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+## Development
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+- `npm run dev` starts the local development server.
+- `npm run build` runs the TypeScript check and production build.
+- `npm run lint` runs Oxlint.
+
+Admins can create and edit products, upload JPEG/PNG/WebP images up to 5 MB, set prices and reward rates, and review submissions. The database records package pricing changes and captures the applicable reward rate for each submission. Approved rewards are calculated and credited by a database function.
+
+Package order records capture the current product terms, but checkout, payment processing, deposits, and withdrawals are not enabled yet.
