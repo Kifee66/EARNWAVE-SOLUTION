@@ -24,6 +24,7 @@ export type PackageOption = {
   badge: string
   featured?: boolean
   rewardPer100Views?: number
+  isActive?: boolean
 }
 
 export const packageOptions: PackageOption[] = [

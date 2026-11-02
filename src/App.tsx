@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
   BadgeCheck,
@@ -44,20 +44,126 @@ import {
   type PackageOption,
 } from './data/mock-data'
 import { cn } from './lib/utils'
+import { supabase } from './lib/supabase'
 
 type UserRole = 'publisher' | 'admin'
 
+type PackageRecord = {
+  id: string
+  name: string
+  price: number | string
+  description: string
+  campaigns_count: number
+  badge: string | null
+  featured: boolean
+  reward_per_100_views: number | string
+  perks: string[] | null
+  is_active: boolean
+}
+
+function mapPackageRecord(item: PackageRecord): PackageOption {
+  return {
+    id: item.id,
+    name: item.name,
+    price: Number(item.price),
+    description: item.description,
+    campaigns: item.campaigns_count,
+    perks: item.perks ?? [],
+    badge: item.badge ?? '',
+    featured: item.featured,
+    rewardPer100Views: Number(item.reward_per_100_views),
+    isActive: item.is_active,
+  }
+}
+
 type Props = {
-  role: UserRole
+  role: UserRole | null
   loggedIn: boolean
   setRole: (role: UserRole) => void
   setLoggedIn: (loggedIn: boolean) => void
 }
 
 function App() {
-  const [role, setRole] = useState<UserRole>('publisher')
+  const [role, setRole] = useState<UserRole | null>(null)
   const [loggedIn, setLoggedIn] = useState(false)
   const [packageList, setPackageList] = useState<PackageOption[]>(packageOptions)
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase))
+  const [authError, setAuthError] = useState('')
+  const [packageError, setPackageError] = useState('')
+
+  useEffect(() => {
+    const client = supabase
+    if (!client) return
+
+    let active = true
+    const syncSession = async (session: { user: { id: string } } | null) => {
+      if (!session) {
+        if (active) {
+          setRole(null)
+          setLoggedIn(false)
+          setAuthError('')
+          setAuthLoading(false)
+        }
+        return
+      }
+
+      const { data, error } = await client
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (!active) return
+      if (error || !data || (data.role !== 'publisher' && data.role !== 'admin')) {
+        setRole(null)
+        setLoggedIn(true)
+        setAuthError(error?.message ?? 'Your account profile is missing a valid role. Contact support.')
+      } else {
+        setRole(data.role)
+        setLoggedIn(true)
+        setAuthError('')
+      }
+      setAuthLoading(false)
+    }
+
+    const { data: authListener } = client.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => {
+        void syncSession(session)
+      }, 0)
+    })
+
+    return () => {
+      active = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    const client = supabase
+    if (!client) return
+
+    let active = true
+    const loadPackages = async () => {
+      const { data, error } = await client
+        .from('packages')
+        .select('id, name, price, description, campaigns_count, badge, featured, reward_per_100_views, perks, is_active')
+        .order('created_at', { ascending: true })
+
+      if (!active) return
+      if (error) {
+        setPackageError(`Could not load packages: ${error.message}`)
+        return
+      }
+
+      setPackageError('')
+      setPackageList((data ?? []).map((item) => mapPackageRecord(item as PackageRecord)))
+    }
+
+    void loadPackages()
+    return () => {
+      active = false
+    }
+  }, [role])
 
   return (
     <BrowserRouter>
@@ -66,6 +172,11 @@ function App() {
         loggedIn={loggedIn}
         setRole={setRole}
         setLoggedIn={setLoggedIn}
+        authLoading={authLoading}
+        authError={authError}
+        setAuthError={setAuthError}
+        packageError={packageError}
+        setPackageError={setPackageError}
         packageList={packageList}
         setPackageList={setPackageList}
       />
@@ -73,7 +184,27 @@ function App() {
   )
 }
 
-function AppShell({ role, loggedIn, setRole, setLoggedIn, packageList, setPackageList }: Props & { packageList: PackageOption[]; setPackageList: React.Dispatch<React.SetStateAction<PackageOption[]>> }) {
+function AppShell({
+  role,
+  loggedIn,
+  setRole,
+  setLoggedIn,
+  authLoading,
+  authError,
+  setAuthError,
+  packageError,
+  setPackageError,
+  packageList,
+  setPackageList,
+}: Props & {
+  authLoading: boolean
+  authError: string
+  setAuthError: (message: string) => void
+  packageError: string
+  setPackageError: (message: string) => void
+  packageList: PackageOption[]
+  setPackageList: React.Dispatch<React.SetStateAction<PackageOption[]>>
+}) {
   const location = useLocation()
   const mainLinks = [
     { label: 'Home', path: '/' },
@@ -110,19 +241,20 @@ function AppShell({ role, loggedIn, setRole, setLoggedIn, packageList, setPackag
           </nav>
 
           <div className="hidden items-center gap-3 lg:flex">
-            <button
-              type="button"
-              onClick={() => setRole(role === 'publisher' ? 'admin' : 'publisher')}
-              className="secondary-button"
-            >
-              Demo: {role === 'publisher' ? 'Publisher' : 'Admin'}
-            </button>
             {loggedIn ? (
               <>
                 <Link to={role === 'admin' ? '/admin' : '/dashboard'} className="secondary-button">
                   {role === 'admin' ? 'Admin panel' : 'Dashboard'}
                 </Link>
-                <button type="button" onClick={() => setLoggedIn(false)} className="primary-button">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!supabase) return
+                    const { error } = await supabase.auth.signOut()
+                    if (error) setAuthError(error.message)
+                  }}
+                  className="primary-button"
+                >
                   Log out
                 </button>
               </>
@@ -144,6 +276,13 @@ function AppShell({ role, loggedIn, setRole, setLoggedIn, packageList, setPackag
         </div>
       </header>
 
+      {authError || packageError ? (
+        <div className="section-shell mt-4 space-y-2">
+          {authError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{authError}</p> : null}
+          {packageError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{packageError}</p> : null}
+        </div>
+      ) : null}
+
       <main className="pb-16">
         <Routes>
           <Route path="/" element={<HomePage packageList={packageList} />} />
@@ -155,16 +294,29 @@ function AppShell({ role, loggedIn, setRole, setLoggedIn, packageList, setPackag
           <Route path="/privacy" element={<LegalPage title="Privacy Policy" />} />
           <Route
             path="/login"
-            element={<LoginPage setRole={setRole} setLoggedIn={setLoggedIn} role={role} />}
+            element={
+              <LoginPage
+                setRole={setRole}
+                setLoggedIn={setLoggedIn}
+                authLoading={authLoading}
+                setAuthError={setAuthError}
+              />
+            }
           />
           <Route
             path="/register"
-            element={<RegisterPage setRole={setRole} setLoggedIn={setLoggedIn} />}
+            element={
+              <RegisterPage
+                setRole={setRole}
+                setLoggedIn={setLoggedIn}
+                setAuthError={setAuthError}
+              />
+            }
           />
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute requiredRole="publisher" loggedIn={loggedIn} role={role}>
+              <ProtectedRoute requiredRole="publisher" loggedIn={loggedIn} role={role} loading={authLoading}>
                 <PublisherDashboard />
               </ProtectedRoute>
             }
@@ -172,8 +324,12 @@ function AppShell({ role, loggedIn, setRole, setLoggedIn, packageList, setPackag
           <Route
             path="/admin"
             element={
-              <ProtectedRoute requiredRole="admin" loggedIn={loggedIn} role={role}>
-                <AdminDashboard packageList={packageList} setPackageList={setPackageList} />
+              <ProtectedRoute requiredRole="admin" loggedIn={loggedIn} role={role} loading={authLoading}>
+                <AdminDashboard
+                  packageList={packageList}
+                  setPackageList={setPackageList}
+                  setPackageError={setPackageError}
+                />
               </ProtectedRoute>
             }
           />
@@ -224,14 +380,24 @@ function ProtectedRoute({
   requiredRole,
   loggedIn,
   role,
+  loading,
   children,
 }: {
   requiredRole: UserRole
   loggedIn: boolean
-  role: UserRole
+  role: UserRole | null
+  loading: boolean
   children: React.ReactNode
 }) {
+  if (loading) {
+    return <div className="section-shell py-16 text-center text-slate-600">Checking your account…</div>
+  }
+
   if (!loggedIn) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (!role) {
     return <Navigate to="/login" replace />
   }
 
@@ -363,7 +529,7 @@ function HomePage({ packageList }: { packageList: PackageOption[] }) {
           </div>
         </div>
         <div className="grid gap-5 lg:grid-cols-3">
-          {packageList.map((item) => (
+          {packageList.filter((item) => item.isActive !== false).map((item) => (
             <div
               key={item.id}
               className={cn(
@@ -462,7 +628,7 @@ function PackagesPage({ packageList }: { packageList: PackageOption[] }) {
         <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">Publisher packages</h1>
       </div>
       <div className="mt-10 grid gap-5 lg:grid-cols-3">
-        {packageList.map((item) => (
+        {packageList.filter((item) => item.isActive !== false).map((item) => (
           <div key={item.id} className="glass-card p-6">
             <div className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">{item.badge}</div>
             <h2 className="mt-3 text-3xl font-black text-slate-900">KSh {item.price.toLocaleString()}</h2>
@@ -597,14 +763,57 @@ function LegalPage({ title }: { title: string }) {
 function LoginPage({
   setRole,
   setLoggedIn,
-  role,
+  authLoading,
+  setAuthError,
 }: {
   setRole: (role: UserRole) => void
   setLoggedIn: (loggedIn: boolean) => void
-  role: UserRole
+  authLoading: boolean
+  setAuthError: (message: string) => void
 }) {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setFormError('')
+    setAuthError('')
+    if (!supabase) {
+      setFormError('Sign-in is unavailable until Supabase is configured.')
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
+    const email = String(formData.get('email') ?? '').trim()
+    const password = String(formData.get('password') ?? '')
+    setIsSubmitting(true)
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error || !data.user) {
+      setFormError(error?.message ?? 'Sign-in failed. Please try again.')
+      setIsSubmitting(false)
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .maybeSingle()
+
+    if (profileError || !profile || (profile.role !== 'publisher' && profile.role !== 'admin')) {
+      setFormError(profileError?.message ?? 'Your account does not have a valid profile. Contact support.')
+      setIsSubmitting(false)
+      return
+    }
+
+    setRole(profile.role)
+    setLoggedIn(true)
+    setIsSubmitting(false)
+    navigate(profile.role === 'admin' ? '/admin' : '/dashboard')
+  }
 
   return (
     <section className="section-shell py-16">
@@ -634,41 +843,15 @@ function LoginPage({
               <div className="rounded-full bg-sky-100 p-2 text-sky-700"><LogIn className="h-5 w-5" /></div>
             </div>
 
-            <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <label className="text-sm font-semibold text-slate-700">Sign in as</label>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRole('publisher')}
-                  className={cn(
-                    'flex-1 rounded-full border px-3 py-2 text-sm font-semibold',
-                    role === 'publisher' ? 'border-sky-500 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700',
-                  )}
-                >
-                  Publisher
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRole('admin')}
-                  className={cn(
-                    'flex-1 rounded-full border px-3 py-2 text-sm font-semibold',
-                    role === 'admin' ? 'border-sky-500 bg-sky-600 text-white' : 'border-slate-200 bg-white text-slate-700',
-                  )}
-                >
-                  Admin
-                </button>
-              </div>
-            </div>
-
-            <form className="space-y-4">
+            <form className="space-y-4" onSubmit={(event) => void handleLogin(event)}>
               <div>
                 <label className="text-sm font-semibold text-slate-700">Email address</label>
-                <input className="input-field" type="email" placeholder="publisher@earnwave.co.ke" />
+                <input className="input-field" name="email" type="email" autoComplete="email" required placeholder="you@example.com" />
               </div>
               <div>
                 <label className="text-sm font-semibold text-slate-700">Password</label>
                 <div className="relative">
-                  <input className="input-field pr-11" type={showPassword ? 'text' : 'password'} placeholder="••••••••" />
+                  <input className="input-field pr-11" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required placeholder="Enter your password" />
                   <button
                     type="button"
                     onClick={() => setShowPassword((open) => !open)}
@@ -684,17 +867,16 @@ function LoginPage({
                 <Link to="/" className="font-semibold text-sky-700">Forgot password?</Link>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setLoggedIn(true)
-                  navigate(role === 'admin' ? '/admin' : '/dashboard')
-                }}
-                className="primary-button w-full"
-              >
-                Sign in to {role === 'admin' ? 'admin' : 'publisher'} dashboard
+              <button type="submit" disabled={isSubmitting || authLoading} className="primary-button w-full disabled:cursor-not-allowed disabled:opacity-60">
+                {isSubmitting ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
+
+            {formError ? (
+              <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                {formError}
+              </p>
+            ) : null}
 
             <div className="mt-6 text-center text-sm text-slate-500">
               Don&apos;t have an account? <Link to="/register" className="font-semibold text-sky-700">Create one</Link>
@@ -709,13 +891,78 @@ function LoginPage({
 function RegisterPage({
   setRole,
   setLoggedIn,
+  setAuthError,
 }: {
   setRole: (role: UserRole) => void
   setLoggedIn: (loggedIn: boolean) => void
+  setAuthError: (message: string) => void
 }) {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [formMessage, setFormMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setFormError('')
+    setFormMessage('')
+    setAuthError('')
+    if (!supabase) {
+      setFormError('Registration is unavailable until Supabase is configured.')
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
+    const fullName = String(formData.get('full_name') ?? '').trim()
+    const username = String(formData.get('username') ?? '').trim()
+    const phone = String(formData.get('phone') ?? '').trim()
+    const email = String(formData.get('email') ?? '').trim()
+    const password = String(formData.get('password') ?? '')
+    const confirmPassword = String(formData.get('confirm_password') ?? '')
+
+    if (password !== confirmPassword) {
+      setFormError('The passwords do not match.')
+      return
+    }
+
+    setIsSubmitting(true)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName, username, phone } },
+    })
+
+    if (error || !data.user) {
+      setFormError(error?.message ?? 'Registration failed. Please try again.')
+      setIsSubmitting(false)
+      return
+    }
+
+    if (!data.session) {
+      setFormMessage('Account created. Check your email to confirm your address, then sign in.')
+      setIsSubmitting(false)
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .maybeSingle()
+
+    if (profileError || !profile || (profile.role !== 'publisher' && profile.role !== 'admin')) {
+      setFormError(profileError?.message ?? 'Your account profile could not be loaded. Contact support.')
+      setIsSubmitting(false)
+      return
+    }
+
+    setRole(profile.role)
+    setLoggedIn(true)
+    setIsSubmitting(false)
+    navigate(profile.role === 'admin' ? '/admin' : '/dashboard')
+  }
 
   return (
     <section className="section-shell py-16">
@@ -728,31 +975,31 @@ function RegisterPage({
           <div className="rounded-full bg-sky-100 p-3 text-sky-700"><UserPlus className="h-6 w-6" /></div>
         </div>
 
-        <form className="grid gap-5 md:grid-cols-2">
+        <form className="grid gap-5 md:grid-cols-2" onSubmit={(event) => void handleRegister(event)}>
           <div className="md:col-span-1">
             <label className="text-sm font-semibold text-slate-700">Full name</label>
-            <input className="input-field" placeholder="Jane Wanjiku" />
+            <input className="input-field" name="full_name" required autoComplete="name" placeholder="Jane Wanjiku" />
           </div>
           <div className="md:col-span-1">
             <label className="text-sm font-semibold text-slate-700">Username</label>
-            <input className="input-field" placeholder="@jane_w" />
+            <input className="input-field" name="username" required autoComplete="username" placeholder="jane_w" />
           </div>
           <div className="md:col-span-1">
             <label className="text-sm font-semibold text-slate-700">Email address</label>
-            <input className="input-field" type="email" placeholder="jane@example.com" />
+            <input className="input-field" name="email" type="email" required autoComplete="email" placeholder="jane@example.com" />
           </div>
           <div className="md:col-span-1">
             <label className="text-sm font-semibold text-slate-700">Phone number</label>
-            <input className="input-field" placeholder="+254712345678" />
+            <input className="input-field" name="phone" type="tel" required autoComplete="tel" placeholder="+254712345678" />
           </div>
           <div className="md:col-span-1 relative">
             <label className="text-sm font-semibold text-slate-700">Password</label>
-            <input className="input-field pr-11" type={showPassword ? 'text' : 'password'} placeholder="Create password" />
+            <input className="input-field pr-11" name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" minLength={12} required placeholder="Create password (12+ characters)" />
             <button type="button" onClick={() => setShowPassword((open) => !open)} className="absolute right-3 top-[2.5rem] text-xs font-semibold text-slate-500">{showPassword ? 'Hide' : 'Show'}</button>
           </div>
           <div className="md:col-span-1 relative">
             <label className="text-sm font-semibold text-slate-700">Confirm password</label>
-            <input className="input-field pr-11" type={showConfirm ? 'text' : 'password'} placeholder="Repeat password" />
+            <input className="input-field pr-11" name="confirm_password" type={showConfirm ? 'text' : 'password'} autoComplete="new-password" minLength={12} required placeholder="Repeat password" />
             <button type="button" onClick={() => setShowConfirm((open) => !open)} className="absolute right-3 top-[2.5rem] text-xs font-semibold text-slate-500">{showConfirm ? 'Hide' : 'Show'}</button>
           </div>
 
@@ -761,19 +1008,17 @@ function RegisterPage({
           </div>
 
           <div className="md:col-span-2 flex items-center justify-between gap-4">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-500"><input type="checkbox" /> I agree to the terms and privacy policy</label>
-            <button
-              type="button"
-              onClick={() => {
-                setRole('publisher')
-                setLoggedIn(true)
-                navigate('/dashboard')
-              }}
-              className="primary-button"
-            >
-              Create account
+            <label className="inline-flex items-center gap-2 text-sm text-slate-500"><input type="checkbox" required /> I agree to the terms and privacy policy</label>
+            <button type="submit" disabled={isSubmitting} className="primary-button disabled:cursor-not-allowed disabled:opacity-60">
+              {isSubmitting ? 'Creating account…' : 'Create publisher account'}
             </button>
           </div>
+
+          {formError || formMessage ? (
+            <p role={formError ? 'alert' : 'status'} className={`md:col-span-2 rounded-xl border p-3 text-sm ${formError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+              {formError || formMessage}
+            </p>
+          ) : null}
         </form>
       </div>
     </section>
@@ -885,46 +1130,121 @@ function PublisherDashboard() {
   )
 }
 
-function AdminDashboard({ packageList, setPackageList }: { packageList: PackageOption[]; setPackageList: React.Dispatch<React.SetStateAction<PackageOption[]>> }) {
-  const [newPackage, setNewPackage] = useState({
+function AdminDashboard({
+  packageList,
+  setPackageList,
+  setPackageError,
+}: {
+  packageList: PackageOption[]
+  setPackageList: React.Dispatch<React.SetStateAction<PackageOption[]>>
+  setPackageError: (message: string) => void
+}) {
+  const emptyPackage = {
     name: '',
     price: '1500',
     campaigns: '5',
     rewardPer100Views: '18',
     description: '',
     badge: 'Admin created',
+    featured: false,
+  }
+  const [newPackage, setNewPackage] = useState({
+    ...emptyPackage,
   })
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null)
+  const [formError, setFormError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleCreatePackage = () => {
+  const handleSavePackage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setFormError('')
+    setPackageError('')
     const packageName = newPackage.name.trim()
-    if (!packageName) return
+    const price = Number(newPackage.price)
+    const campaigns = Number(newPackage.campaigns)
+    const rewardPer100Views = Number(newPackage.rewardPer100Views)
+    if (!packageName || !newPackage.description.trim() || !Number.isFinite(price) || price <= 0 ||
+      !Number.isInteger(campaigns) || campaigns < 1 ||
+      !Number.isFinite(rewardPer100Views) || rewardPer100Views < 0) {
+      setFormError('Enter a package name and description, a price above zero, at least one campaign, and a non-negative reward rate.')
+      return
+    }
 
-    const createdPackage: PackageOption = {
-      id: `${packageName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+    if (!supabase) {
+      setFormError('Package changes require a configured Supabase connection.')
+      return
+    }
+
+    setIsSaving(true)
+
+    const packageData = {
       name: packageName,
-      price: Number(newPackage.price) || 0,
-      description:
-        newPackage.description.trim() ||
-        'Custom package configured and approved by the administrator.',
-      campaigns: Number(newPackage.campaigns) || 0,
+      price,
+      description: newPackage.description.trim(),
+      campaigns_count: campaigns,
       badge: newPackage.badge.trim() || 'Admin created',
-      rewardPer100Views: Number(newPackage.rewardPer100Views) || 0,
+      featured: newPackage.featured,
+      reward_per_100_views: rewardPer100Views,
       perks: [
-        `${Number(newPackage.campaigns) || 0} campaign bundles`,
-        `${Number(newPackage.rewardPer100Views) || 0} KSh per 100 approved views`,
+        `${campaigns} campaign bundles`,
+        `${rewardPer100Views} KSh per 100 approved views`,
         'Manual review and approval workflow',
       ],
     }
 
-    setPackageList((prev) => [createdPackage, ...prev])
+    const selectedColumns = 'id, name, price, description, campaigns_count, badge, featured, reward_per_100_views, perks, is_active'
+    const result = editingPackageId
+      ? await supabase.from('packages').update(packageData).eq('id', editingPackageId).select(selectedColumns).single()
+      : await supabase.from('packages').insert({ ...packageData, is_active: true }).select(selectedColumns).single()
+
+    if (result.error || !result.data) {
+      setFormError(result.error?.message ?? 'Could not save this package.')
+      setIsSaving(false)
+      return
+    }
+
+    const savedPackage = mapPackageRecord(result.data as PackageRecord)
+    setPackageList((current) => editingPackageId
+      ? current.map((item) => item.id === savedPackage.id ? savedPackage : item)
+      : [savedPackage, ...current])
+    setEditingPackageId(null)
+    setNewPackage({ ...emptyPackage })
+    setIsSaving(false)
+  }
+
+  const editPackage = (item: PackageOption) => {
+    setFormError('')
+    setEditingPackageId(item.id)
     setNewPackage({
-      name: '',
-      price: '1500',
-      campaigns: '5',
-      rewardPer100Views: '18',
-      description: '',
-      badge: 'Admin created',
+      name: item.name,
+      price: String(item.price),
+      campaigns: String(item.campaigns),
+      rewardPer100Views: String(item.rewardPer100Views ?? 0),
+      description: item.description,
+      badge: item.badge,
+      featured: Boolean(item.featured),
     })
+  }
+
+  const togglePackageActive = async (item: PackageOption) => {
+    setPackageError('')
+    if (!supabase) {
+      setPackageError('Package changes require a configured Supabase connection.')
+      return
+    }
+
+    const isActive = item.isActive === false
+    const { data, error } = await supabase
+      .from('packages')
+      .update({ is_active: isActive })
+      .eq('id', item.id)
+      .select('id')
+      .maybeSingle()
+    if (error || !data) {
+      setPackageError(`Could not ${isActive ? 'activate' : 'deactivate'} ${item.name}: ${error?.message ?? 'No package row was updated.'}`)
+      return
+    }
+    setPackageList((current) => current.map((entry) => entry.id === item.id ? { ...entry, isActive } : entry))
   }
 
   return (
@@ -951,14 +1271,18 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
         <div className="glass-card p-6">
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-xl font-bold text-slate-900">Package management</h2>
-            <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">{packageList.length} active</span>
+            <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">
+              {packageList.filter((item) => item.isActive !== false).length} active
+            </span>
           </div>
 
+          <form onSubmit={(event) => void handleSavePackage(event)}>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="text-sm font-semibold text-slate-700">Package name</label>
               <input
                 className="input-field"
+                required
                 value={newPackage.name}
                 onChange={(event) => setNewPackage((current) => ({ ...current, name: event.target.value }))}
                 placeholder="Premium Reach"
@@ -969,6 +1293,9 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
               <input
                 className="input-field"
                 type="number"
+                min="0.01"
+                step="0.01"
+                required
                 value={newPackage.price}
                 onChange={(event) => setNewPackage((current) => ({ ...current, price: event.target.value }))}
               />
@@ -978,6 +1305,9 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
               <input
                 className="input-field"
                 type="number"
+                min="1"
+                step="1"
+                required
                 value={newPackage.campaigns}
                 onChange={(event) => setNewPackage((current) => ({ ...current, campaigns: event.target.value }))}
               />
@@ -987,6 +1317,9 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
               <input
                 className="input-field"
                 type="number"
+                min="0"
+                step="0.01"
+                required
                 value={newPackage.rewardPer100Views}
                 onChange={(event) => setNewPackage((current) => ({ ...current, rewardPer100Views: event.target.value }))}
               />
@@ -1004,6 +1337,7 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
               <label className="text-sm font-semibold text-slate-700">Description</label>
               <textarea
                 className="input-field min-h-24"
+                required
                 value={newPackage.description}
                 onChange={(event) => setNewPackage((current) => ({ ...current, description: event.target.value }))}
                 placeholder="Describe package benefits and who it is for"
@@ -1011,9 +1345,35 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
             </div>
           </div>
 
-          <button type="button" onClick={handleCreatePackage} className="primary-button mt-5">
-            Save package and reward rule
-          </button>
+          <label className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={newPackage.featured}
+              onChange={(event) => setNewPackage((current) => ({ ...current, featured: event.target.checked }))}
+            />
+            Feature this package publicly
+          </label>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button type="submit" disabled={isSaving} className="primary-button disabled:cursor-not-allowed disabled:opacity-60">
+              {isSaving ? 'Saving…' : editingPackageId ? 'Save package changes' : 'Create package'}
+            </button>
+            {editingPackageId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingPackageId(null)
+                  setNewPackage({ ...emptyPackage })
+                  setFormError('')
+                }}
+                className="secondary-button"
+              >
+                Cancel edit
+              </button>
+            ) : null}
+          </div>
+          {formError ? <p role="alert" className="mt-3 text-sm text-rose-700">{formError}</p> : null}
+          </form>
 
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
             <table className="min-w-full border-collapse text-left">
@@ -1022,6 +1382,8 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
                   <th className="px-4 py-3">Package</th>
                   <th className="px-4 py-3">Price</th>
                   <th className="px-4 py-3">Reward rule</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1033,6 +1395,17 @@ function AdminDashboard({ packageList, setPackageList }: { packageList: PackageO
                     </td>
                     <td className="px-4 py-3 text-slate-700">KSh {item.price.toLocaleString()}</td>
                     <td className="px-4 py-3 text-slate-700">{item.rewardPer100Views ?? 0} KSh / 100 views</td>
+                    <td className="px-4 py-3 text-slate-700">{item.isActive === false ? 'Inactive' : 'Active'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => editPackage(item)} className="secondary-button px-3 py-2 text-xs">
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => void togglePackageActive(item)} className="secondary-button px-3 py-2 text-xs">
+                          {item.isActive === false ? 'Activate' : 'Deactivate'}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
